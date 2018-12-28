@@ -3,8 +3,6 @@ use serial::prelude::*;
 
 use std::{string::String, env, io, collections::HashMap, time::Duration};
 
-const PARAMETER_TABLE : [&'static str; 2] = ["--port-name", "--disable-output"];
-
 /// Main function.
 fn main() {
 
@@ -18,7 +16,7 @@ fn main() {
 }
 
 fn app(arg_hash: HashMap<String, String>) {
-
+    println!("App!");
 }
 
 struct CmdLineArg {
@@ -28,7 +26,31 @@ struct CmdLineArg {
     explanation : &'static str
 }
 
-const CMD_LINE_ARGS : [CmdLineArg; 2] =
+impl CmdLineArg {
+    fn get_explanation(&self) -> String {
+        self.explanation.to_string()
+    }
+
+    fn get_string(&self) -> String {
+        self.arg_str.to_string()
+    }
+
+    fn get_param(&self) -> Option<String> {
+        match self.param_str {
+            None => None,
+            _ => Some(self.param_str.unwrap().to_string())
+        }
+    }
+
+    fn has_parameters(&self) -> bool {
+        match self.param_str {
+            None => false,
+            _ => true
+        }
+    }
+}
+
+const CMD_LINE_ARGS : [CmdLineArg; 3] =
 [
     CmdLineArg {
         arg_str : "--port-name",
@@ -42,32 +64,41 @@ const CMD_LINE_ARGS : [CmdLineArg; 2] =
         param_str : None,
         is_required : false,
         explanation : "Disables incoming debug messages from the console"
+    },
+
+    CmdLineArg {
+        arg_str : "--baudrate",
+        param_str : Some("[BAUDRATE]"),
+        is_required : false,
+        explanation : "Sets serial port baudrate. Defaults to 4800bps"
     }
 ];
+
+fn show_help() {
+    println!("rspsxserial command line arguments:");
+
+    for arg in CMD_LINE_ARGS.iter() {
+        let mut line = String::new();
+
+        line.push_str(arg.arg_str);
+
+        if arg.has_parameters() {
+                line.push(' ');
+                line.push_str(arg.param_str.unwrap());
+        };
+
+        line.push('\t');
+        line.push_str(arg.explanation);
+        line.push('.');
+
+        println!("{}", line);
+    }
+}
 
 fn process_arguments() -> Option<HashMap<String, String>> {
 
     if env::args_os().count() <= 1 {
-        println!("rspsxserial command line arguments:");
-
-        for arg in CMD_LINE_ARGS.iter() {
-            let mut line = String::new();
-
-            line.push_str(arg.arg_str);
-
-            match arg.param_str {
-                None => {},
-                _ => {
-                    line.push(' ');
-                    line.push_str(arg.param_str.unwrap());
-                }
-            };
-
-            line.push('\t');
-            line.push_str(arg.explanation);
-
-            println!("{}", line);
-        }
+        show_help();
         return None;
     }
 
@@ -128,7 +159,17 @@ fn process_arguments() -> Option<HashMap<String, String>> {
         }
     }
 
-    println!("Hash = {:?}", arg_hash);
+    // Check all needed parameters have been given
+    for arg in CMD_LINE_ARGS.iter() {
+        if arg.is_required {
+            let arg_string = arg.arg_str.to_string();
+
+            if !arg_hash.contains_key(&arg_string) {
+                println!("Missing required option {}", arg_string);
+                return None
+            }
+        }
+    }
 
     Some(arg_hash)
 }
