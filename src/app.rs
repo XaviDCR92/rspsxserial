@@ -6,9 +6,7 @@ use std::{string::String, io, collections::HashMap};
 /// if configured by command line parameters.
 pub fn app(arg_hash: HashMap<String, String>) -> io::Result<()> {
 
-    let tcp = arg_hash.get(&String::from("--tcp"));
-
-    match tcp {
+    match arg_hash.get(&String::from("--tcp")) {
         None => println!("No TCP address specified"),
         Some(addr) => setup_tcp(addr)?
     };
