@@ -53,7 +53,19 @@ fn setup_tcp(tcp_addr : &String) -> io::Result<()> {
 }
 
 fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> io::Result<()> {
-    let port = serial_init(addr, port_name, baud_rate).unwrap();
+    use transfer;
+    use transfer::TransferState;
+
+    let mut port = serial_init(addr, port_name, baud_rate).unwrap();
+
+    let mut state = TransferState::FirstContact;
+
+    loop {
+        state = match state {
+            TransferState::FirstContact => transfer::first_contact(&mut port),
+            _ => TransferState::Finished
+        }
+    }
 
     Ok(())
 }
@@ -67,13 +79,19 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
     // a SystemPort instance will be returned.
     let port = serial::open(port_name);
 
+    // This variable will be bound to a SystemPort
+    // instance if everything could be configured successfully.
     let mut port_unwrapped;
 
     let baud =  match baud_rate {
-        None => serial::Baud4800,
+        // Assign default baud rate if no
+        // option was specified.
+        None => serial::Baud115200,
         Some(b) => {
             match b.parse() {
+                // Parse user-specific baud rate.
                 Ok(s) => serial::BaudRate::from_speed(s),
+                // Could not parse input baud rate.
                 Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Invalid baudrate")),
             }
         }

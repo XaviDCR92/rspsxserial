@@ -1,6 +1,7 @@
 extern crate serial;
 mod cmdline;
 mod app;
+mod transfer;
 
 /// Main function.
 fn main() {
@@ -8,6 +9,7 @@ fn main() {
     match cmdline::process_arguments() {
         None => return,
         Some(hash) => {
+            // Execute application logic.
             match app::app(hash) {
                 _ => return
             }

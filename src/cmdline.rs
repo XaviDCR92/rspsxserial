@@ -17,7 +17,12 @@ pub const PORT_NAME_ARG : &'static str = "--port-name";
 /// This parameter disables sending any information
 /// coming from the console to stdout.
 pub const DISABLE_OUTPUT_ARG : &'static str = "--disable-output";
-pub const BAUDRATE_ARG : &'static str = "--baudrate";
+
+/// This parameter allows defining a specific baud rate,
+pub const BAUDRATE_ARG : &'static str = "--baud-rate";
+
+/// This parameter allows using a TCP connection
+/// against a GUI front-end.
 pub const TCP_ARG : &'static str = "--tcp";
 
 const CMD_LINE_ARGS : [CmdLineArg; 4] =
@@ -40,7 +45,7 @@ const CMD_LINE_ARGS : [CmdLineArg; 4] =
         arg_str : BAUDRATE_ARG,
         param_str : Some("[BAUDRATE]"),
         is_required : false,
-        explanation : "Sets serial port baudrate. Defaults to 4800bps"
+        explanation : "Sets serial port baudrate. Defaults to 115200 bps"
     },
 
     CmdLineArg {
@@ -68,6 +73,10 @@ fn show_help() {
     }
 }
 
+/// This function creates a Hashmap instance
+/// that relates all command line arguments
+/// against its parameters. For example:
+/// ["--baud-rate", "4800"], ["--disable-output", ""]
 pub fn process_arguments() -> Option<HashMap<String, String>> {
 
     if env::args_os().count() <= 1 {
@@ -79,7 +88,7 @@ pub fn process_arguments() -> Option<HashMap<String, String>> {
 
     // This enum defines a finite-state machine that
     // will be used to determine what type of data is
-    // being retrieved
+    // being retrieved from command line arguments.
     enum ExpectedParameter
     {
         ParameterOption,
