@@ -53,14 +53,18 @@ fn setup_tcp(tcp_addr : &String) -> io::Result<()> {
 }
 
 fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> io::Result<()> {
-    serial_init(addr, port_name, baud_rate).unwrap();
+    let port = serial_init(addr, port_name, baud_rate).unwrap();
 
     Ok(())
 }
 
+/// This function initializes a serial device.
+/// Command line parameters are extracted and parsed here.
 fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> io::Result<serial::SystemPort> {
     use serial::SerialPort;
 
+    // Try to open the serial device. If opened,
+    // a SystemPort instance will be returned.
     let port = serial::open(port_name);
 
     let mut port_unwrapped;
@@ -70,7 +74,7 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
         Some(b) => {
             match b.parse() {
                 Ok(s) => serial::BaudRate::from_speed(s),
-                Err(_) | Ok(_) => return Err(io::Error::new(io::ErrorKind::Other, "Invalid baudrate")),
+                Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Invalid baudrate")),
             }
         }
     };
@@ -86,15 +90,17 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
        }
     };
 
-    let settings : serial::PortSettings = serial::PortSettings {
-                baud_rate: baud,
-                char_size: serial::Bits8,
-                parity: serial::ParityOdd,
-                stop_bits: serial::Stop1,
-                flow_control: serial::FlowNone
-            };
+    let settings =
+        serial::PortSettings {
+            baud_rate: baud,
+            char_size: serial::Bits8,
+            parity: serial::ParityOdd,
+            stop_bits: serial::Stop1,
+            flow_control: serial::FlowNone
+        };
 
     port_unwrapped.configure(&settings)?;
 
+    // Return SystemPort instance if successful.
     Ok(port_unwrapped)
 }

@@ -1,5 +1,9 @@
 use std::{string::String, env, collections::HashMap};
 
+/// This structure defines a command line
+/// argument and its low-level parameters.
+/// An array of CmdLineArg instances,
+/// called CMD_LINE_ARGS, is defined.
 pub struct CmdLineArg {
     pub arg_str : &'static str,
     pub param_str : Option<&'static str>,
@@ -7,7 +11,11 @@ pub struct CmdLineArg {
     explanation : &'static str
 }
 
+/// This parameter allows defining serial port name.
 pub const PORT_NAME_ARG : &'static str = "--port-name";
+
+/// This parameter disables sending any information
+/// coming from the console to stdout.
 pub const DISABLE_OUTPUT_ARG : &'static str = "--disable-output";
 pub const BAUDRATE_ARG : &'static str = "--baudrate";
 pub const TCP_ARG : &'static str = "--tcp";
