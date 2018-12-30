@@ -1,5 +1,4 @@
-//~ extern crate serial;
-//~ use serial::prelude::*;
+extern crate serial;
 
 mod cmdline;
 mod app;

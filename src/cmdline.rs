@@ -7,31 +7,36 @@ pub struct CmdLineArg {
     explanation : &'static str
 }
 
-pub const CMD_LINE_ARGS : [CmdLineArg; 4] =
+pub const PORT_NAME_ARG : &'static str = "--port-name";
+pub const DISABLE_OUTPUT_ARG : &'static str = "--disable-output";
+pub const BAUDRATE_ARG : &'static str = "--baudrate";
+pub const TCP_ARG : &'static str = "--tcp";
+
+const CMD_LINE_ARGS : [CmdLineArg; 4] =
 [
     CmdLineArg {
-        arg_str : "--port-name",
+        arg_str : PORT_NAME_ARG,
         param_str : Some("[PORT]"),
         is_required : true,
         explanation : "Sets serial port"
     },
 
     CmdLineArg {
-        arg_str : "--disable-output",
+        arg_str : DISABLE_OUTPUT_ARG,
         param_str : None,
         is_required : false,
         explanation : "Disables incoming debug messages from the console"
     },
 
     CmdLineArg {
-        arg_str : "--baudrate",
+        arg_str : BAUDRATE_ARG,
         param_str : Some("[BAUDRATE]"),
         is_required : false,
         explanation : "Sets serial port baudrate. Defaults to 4800bps"
     },
 
     CmdLineArg {
-        arg_str : "--tcp",
+        arg_str : TCP_ARG,
         param_str : Some("[IPv4:PORT]"),
         is_required : false,
         explanation : "Sets a TCP connection against a compatible \
@@ -73,6 +78,17 @@ pub fn process_arguments() -> Option<HashMap<String, String>> {
         ParameterValue
     };
 
+    impl std::fmt::Debug for ExpectedParameter {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!( f,
+                    "ExpectedParameter::{}",
+                    match self {
+                        ExpectedParameter::ParameterOption => "ParameterOption",
+                        ExpectedParameter::ParameterValue => "ParameterValue"
+                    })
+        }
+    };
+
     let mut parameter_state = ExpectedParameter::ParameterOption;
 
     let mut arg_hash: HashMap<String, String> = HashMap::new();
@@ -86,6 +102,7 @@ pub fn process_arguments() -> Option<HashMap<String, String>> {
                 if arg_str.starts_with("--")
                 {
                     // Looks like a valid parameter
+                    let mut result : bool = false;
 
                     for param in CMD_LINE_ARGS.iter() {
 
@@ -103,13 +120,21 @@ pub fn process_arguments() -> Option<HashMap<String, String>> {
                                 }
                             }
 
+                            result = true;
+
                             break;
                         }
+                    }
+
+                    if !result {
+                        // Parameter could not be found inside the list.
+                        println!("Invalid parameter {}", parameter_name);
+                        return None
                     }
                 }
                 else
                 {
-                    return None;
+                    return None
                 }
             },
 
