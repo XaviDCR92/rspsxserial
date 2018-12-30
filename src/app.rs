@@ -69,8 +69,7 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
         None => serial::Baud4800,
         Some(b) => {
             match b.parse() {
-                Ok(4800) => serial::Baud4800,
-                Ok(9600) => serial::Baud9600,
+                Ok(s) => serial::BaudRate::from_speed(s),
                 Err(_) | Ok(_) => return Err(io::Error::new(io::ErrorKind::Other, "Invalid baudrate")),
             }
         }
