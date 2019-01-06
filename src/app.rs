@@ -1,11 +1,16 @@
-use std::{string::String, io, collections::HashMap};
+use std:: {
+    string::String,
+    io:: {
+        Result, Error, ErrorKind
+    },
+    collections::HashMap
+};
 
 /// This function is called once all command line a
 /// rguments have been successfully parsed, and tries
 /// to establish a TCP connection against a front-end
 /// if configured by command line parameters.
-pub fn app(arg_hash: HashMap<String, String>) -> io::Result<()> {
-
+pub fn app(arg_hash: HashMap<String, String>) -> Result<()> {
     use cmdline;
 
     let addr = arg_hash.get(&String::from(cmdline::TCP_ARG));
@@ -27,7 +32,7 @@ pub fn app(arg_hash: HashMap<String, String>) -> io::Result<()> {
     Ok(())
 }
 
-fn setup_tcp(tcp_addr : &String) -> io::Result<()> {
+fn setup_tcp(tcp_addr : &String) -> Result<()> {
 
     use std::net::{TcpListener};
 
@@ -40,7 +45,7 @@ fn setup_tcp(tcp_addr : &String) -> io::Result<()> {
             //~ Ok(s) => {
                 //~ // do something with the TcpStream
             //~ }
-            //~ Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+            //~ Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 //~ // wait until network socket is ready, typically implemented
                 //~ // via platform-specific APIs such as epoll or IOCP
                 //~ continue;
@@ -52,19 +57,25 @@ fn setup_tcp(tcp_addr : &String) -> io::Result<()> {
     Ok(())
 }
 
-fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> io::Result<()> {
+fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> Result<()> {
     use transfer;
     use transfer::TransferState;
 
     let mut port = serial_init(addr, port_name, baud_rate).unwrap();
 
     let mut state = TransferState::FirstContact;
+    let mut prev_state = state;
 
     loop {
         state = match state {
             TransferState::FirstContact => transfer::first_contact(&mut port),
+            TransferState::WaitAck => {
+                state = transfer::wait_ack(&mut port, prev_state);
+                prev_state = state;
+                state
+            },
             _ => TransferState::Finished
-        }
+        };
     }
 
     Ok(())
@@ -72,16 +83,12 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
 
 /// This function initializes a serial device.
 /// Command line parameters are extracted and parsed here.
-fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> io::Result<serial::SystemPort> {
+fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> Result<serial::SystemPort> {
     use serial::SerialPort;
 
     // Try to open the serial device. If opened,
     // a SystemPort instance will be returned.
     let port = serial::open(port_name);
-
-    // This variable will be bound to a SystemPort
-    // instance if everything could be configured successfully.
-    let mut port_unwrapped;
 
     let baud =  match baud_rate {
         // Assign default baud rate if no
@@ -92,15 +99,18 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
                 // Parse user-specific baud rate.
                 Ok(s) => serial::BaudRate::from_speed(s),
                 // Could not parse input baud rate.
-                Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Invalid baudrate")),
+                Err(_) => return Err(Error::new(ErrorKind::Other, "Invalid baudrate")),
             }
         }
     };
 
+    // This variable will be bound to a SystemPort
+    // instance if everything could be configured successfully.
+    let mut port_unwrapped;
+
     match port {
        Err(_) => {
-           println!();
-           return Err(io::Error::new(io::ErrorKind::NotFound, "Could not open serial device"));
+           return Err(Error::new(ErrorKind::NotFound, "Could not open serial device"));
        },
 
        Ok(p) => {

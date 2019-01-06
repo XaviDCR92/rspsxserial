@@ -14,7 +14,7 @@ fn main() {
                 _ => return
             }
         }
-    };
+    }
 }
 
 //~ /** let mut port = serial::open(&arg).unwrap();

@@ -1,6 +1,6 @@
 [package]
 name = "rspsxserial"
-version = "0.0.1"
+version = "0.0.0"
 authors = ["Xavier Del Campo <xavi92psx@gmail.com>"]
 
 [dependencies]
