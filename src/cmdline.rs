@@ -25,7 +25,11 @@ pub const BAUDRATE_ARG : &'static str = "--baud-rate";
 /// against a GUI front-end.
 pub const TCP_ARG : &'static str = "--tcp";
 
-const CMD_LINE_ARGS : [CmdLineArg; 4] =
+/// This parameter defines what folder should
+/// be looked up in order to set up a working environment
+pub const CDIMG_FOLDER : &'static str = "--cdimg-folder";
+
+const CMD_LINE_ARGS : [CmdLineArg; 5] =
 [
     CmdLineArg {
         arg_str : PORT_NAME_ARG,
@@ -54,6 +58,13 @@ const CMD_LINE_ARGS : [CmdLineArg; 4] =
         is_required : false,
         explanation : "Sets a TCP connection against a compatible \
                       front-end application"
+    },
+
+    CmdLineArg {
+        arg_str : CDIMG_FOLDER,
+        param_str : Some("[FOLDER]"),
+        is_required : true,
+        explanation : "Sets working directory"
     }
 ];
 

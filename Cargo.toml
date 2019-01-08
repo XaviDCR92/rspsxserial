@@ -5,3 +5,5 @@ authors = ["Xavier Del Campo <xavi92psx@gmail.com>"]
 
 [dependencies]
 serial = "0.4.0"
+regex = "1"
+lazy_static = "1.2.0"

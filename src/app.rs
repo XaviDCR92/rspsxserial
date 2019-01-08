@@ -27,7 +27,10 @@ pub fn app(arg_hash: HashMap<String, String>) -> Result<()> {
     // but don't process it yet.
     let baud_rate = arg_hash.get(&String::from(cmdline::BAUDRATE_ARG));
 
-    serial_comm(addr, port_name, baud_rate)?;
+    // Extract folder where CD-ROM file system is mounted.
+    let folder = arg_hash.get(&String::from(cmdline::CDIMG_FOLDER)).expect("Invalid given folder");
+
+    serial_comm(addr, port_name, baud_rate, folder)?;
 
     Ok(())
 }
@@ -57,7 +60,7 @@ fn setup_tcp(tcp_addr : &String) -> Result<()> {
     Ok(())
 }
 
-fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>) -> Result<()> {
+fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&String>, folder : &String) -> Result<()> {
     use transfer;
     use transfer::TransferState;
 
@@ -74,7 +77,9 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
                 prev_state = state;
                 state
             },
-            _ => TransferState::Finished
+            TransferState::SendHeader => transfer::send_header(&mut port, folder),
+            _ => TransferState::Finished,
+            TransferState::Finished => break,
         };
     }
 
@@ -122,7 +127,7 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
         serial::PortSettings {
             baud_rate: baud,
             char_size: serial::Bits8,
-            parity: serial::ParityOdd,
+            parity: serial::ParityNone,
             stop_bits: serial::Stop1,
             flow_control: serial::FlowNone
         };
