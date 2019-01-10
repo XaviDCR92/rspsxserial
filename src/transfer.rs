@@ -69,8 +69,36 @@ pub fn wait_ack(port : &mut serial::SystemPort, prev_state: TransferState) -> Tr
 }
 
 pub fn send_header(port : &mut serial::SystemPort, folder : &String) -> TransferState {
-    match get_exe_name(folder) {
+    match get_exe_data(&folder) {
         None => TransferState::Finished,
+        Some(header) => {
+            const HEADER_SIZE : usize = 32 as usize;
+            const PACKET_SIZE : usize = 8 as usize;
+
+            for packet in (0..HEADER_SIZE).step_by(PACKET_SIZE) {
+                match header.get(packet..(packet + PACKET_SIZE)) {
+                    None => return TransferState::Finished,
+                    Some(chunk) => {
+                        use std::{thread, time};
+
+                        thread::sleep(time::Duration::from_millis(100));
+
+                        use std::io::Write;
+                        (*port).write(&chunk).expect("Could not write EXE header into the device");
+
+                        println!("Sent packet {:?}", &chunk);
+                    }
+                }
+            }
+
+            TransferState::WaitAck
+        }
+    }
+}
+
+fn get_exe_data(folder: &String) -> Option<Vec<u8>> {
+    match get_exe_name(folder) {
+        None => None,
         Some(exe_name) => {
             let exe_path = format!("{}/{}", folder, exe_name);
 
@@ -79,19 +107,10 @@ pub fn send_header(port : &mut serial::SystemPort, folder : &String) -> Transfer
             match fs::read(&exe_path) {
                 Err(e) => {
                     println!("{:?}. File path: {}", e, exe_path);
-                    TransferState::Finished
+                    None
                 },
                 Ok(data) => {
-                    use std::io::Write;
-
-                    const HEADER_SIZE : usize = 32 as usize;
-                    let mut header = data.clone();
-
-                    header.truncate(HEADER_SIZE);
-
-                    (*port).write(&header).expect("Could not write EXE header into the device");
-
-                    TransferState::WaitAck
+                    Some(data)
                 }
             }
         }
