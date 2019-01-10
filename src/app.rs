@@ -78,8 +78,7 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
                 state
             },
             TransferState::SendHeader => transfer::send_header(&mut port, folder),
-            _ => TransferState::Finished,
-            TransferState::Finished => break,
+            TransferState::Finished => break
         };
     }
 
