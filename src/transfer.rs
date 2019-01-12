@@ -3,6 +3,9 @@ pub enum TransferState {
     FirstContact,
     WaitAck,
     SendHeader,
+    SendExeSize,
+    CleaningRAM,
+    SendExeData,
     Finished
 }
 
@@ -16,7 +19,6 @@ pub fn first_contact(port : &mut serial::SystemPort) -> TransferState {
         Err(_) => TransferState::FirstContact,
         Ok(b) => {
             if b == 1 {
-                println!("Written 1 byte: {}", INITIAL_TRANSMISSION);
                 TransferState::WaitAck
             }
             else
@@ -27,76 +29,119 @@ pub fn first_contact(port : &mut serial::SystemPort) -> TransferState {
     }
 }
 
-pub fn wait_ack(port : &mut serial::SystemPort, prev_state: TransferState) -> TransferState {
-
+fn wait_ack(port : &mut serial::SystemPort, buffer : &mut [u8]) -> Result<usize, std::io::Error> {
     // For some reason, this trait has to be imported,
     // but shouldn't serial::SerialPort be already doing this?
     use std::io::Read;
 
-    let mut buffer : [u8; 1] = [0];
-
     use serial::SerialPort;
 
-    (*port).set_timeout(std::time::Duration::from_secs(2)).expect("Could not adjust timeout");
+    const TIMEOUT_SECONDS : u64 = 2;
 
-    match (*port).read(&mut buffer) {
-        Err(_) => {
-            prev_state
-        },
-        Ok(b) => {
-            if b == 1 {
-                if buffer[0] == 'b' as u8 {
-                    println!("Received ACK");
-                    match prev_state {
-                        TransferState::FirstContact => {
-                            println!("Now send header");
-                            TransferState::SendHeader
-                        },
-                        _ => TransferState::Finished
-                    }
-                }
-                else
-                {
-                    prev_state
+    (*port).set_timeout(std::time::Duration::from_secs(TIMEOUT_SECONDS)).expect("Could not adjust timeout");
+
+    (*port).read(buffer)
+}
+
+pub fn wait_ack_default(port : &mut serial::SystemPort, prev_state: TransferState) -> TransferState {
+    let mut buffer : [u8; 1] = [0];
+
+    match wait_ack(port, &mut buffer) {
+        Ok(1) => {
+            if *(buffer.get(0).unwrap()) == 'b' as u8 {
+                match prev_state {
+                    TransferState::FirstContact => TransferState::SendHeader,
+                    TransferState::SendHeader => TransferState::SendExeSize,
+                    TransferState::SendExeSize => TransferState::CleaningRAM,
+                    TransferState::CleaningRAM => TransferState::SendExeData,
+                    TransferState::SendExeData => TransferState::SendExeData,
+                    _ => TransferState::Finished
                 }
             }
             else
             {
                 prev_state
             }
-        }
-    }
-}
-
-pub fn send_header(port : &mut serial::SystemPort, folder : &String) -> TransferState {
-    match get_exe_data(&folder) {
-        None => TransferState::Finished,
-        Some(header) => {
-            const HEADER_SIZE : usize = 32 as usize;
-            const PACKET_SIZE : usize = 8 as usize;
-
-            for packet in (0..HEADER_SIZE).step_by(PACKET_SIZE) {
-                match header.get(packet..(packet + PACKET_SIZE)) {
-                    None => return TransferState::Finished,
-                    Some(chunk) => {
-                        use std::{thread, time};
-
-                        thread::sleep(time::Duration::from_millis(100));
-
-                        use std::io::Write;
-                        (*port).write(&chunk).expect("Could not write EXE header into the device");
-
-                        println!("Sent packet {:?}", &chunk);
-                    }
-                }
+        },
+        _ => {
+            match prev_state {
+                TransferState::SendExeSize => TransferState::CleaningRAM,
+                _ => prev_state
             }
-
-            TransferState::WaitAck
         }
     }
 }
 
-fn get_exe_data(folder: &String) -> Option<Vec<u8>> {
+const PACKET_SIZE : usize = 8 as usize;
+
+pub fn send_header(port : &mut serial::SystemPort, exe_data: &Vec<u8>) -> TransferState {
+
+    const HEADER_SIZE : usize = 32 as usize;
+    for packet in (0..HEADER_SIZE).step_by(PACKET_SIZE) {
+        match exe_data.get(packet..(packet + PACKET_SIZE)) {
+            None => return TransferState::Finished,
+            Some(chunk) => {
+                use std::{thread, time};
+
+                thread::sleep(time::Duration::from_millis(100));
+
+                use std::io::Write;
+                (*port).write(&chunk).expect("Could not write EXE header into the device");
+            }
+        }
+    }
+
+    TransferState::WaitAck
+}
+
+const EXE_DATA_OFFSET : usize = 2048 as usize;
+
+pub fn send_exe_size(port: &mut serial::SystemPort, exe_data: &Vec<u8>) -> TransferState {
+    if exe_data.len() > EXE_DATA_OFFSET {
+        let exe_size = exe_data.len() - EXE_DATA_OFFSET;
+
+        use std::io::Write;
+
+        let exe_size_vec : [u8; 4] = [(exe_size & 0xFF) as u8,
+                                        ((exe_size & 0xFF00) >> 8) as u8,
+                                        ((exe_size & 0xFF0000) >> 16) as u8,
+                                        ((exe_size & 0xFF000000) >> 24) as u8];
+        (*port).write(&exe_size_vec).expect("Could not write EXE size into the device");
+
+        TransferState::WaitAck
+    }
+    else
+    {
+        println!("PSX-EXE is too small");
+        TransferState::Finished
+    }
+}
+
+pub fn send_exe_data(port: &mut serial::SystemPort, sent_bytes: &mut usize, exe_data: &Vec<u8>) -> TransferState {
+    let exe_size = exe_data.len();
+
+    let total_sent_bytes = *sent_bytes + EXE_DATA_OFFSET;
+
+    if total_sent_bytes < exe_size {
+        match exe_data.get(total_sent_bytes..(total_sent_bytes + PACKET_SIZE)) {
+            None => return TransferState::Finished,
+            Some(chunk) => {
+                use std::io::Write;
+                (*port).write(&chunk).expect("Could not write EXE header into the device");
+
+                *sent_bytes += PACKET_SIZE;
+            }
+        }
+
+        TransferState::WaitAck
+    }
+    else
+    {
+        TransferState::Finished
+    }
+}
+
+pub fn get_exe_data(folder: &String) -> Option<Vec<u8>> {
     match get_exe_name(folder) {
         None => None,
         Some(exe_name) => {
@@ -106,7 +151,7 @@ fn get_exe_data(folder: &String) -> Option<Vec<u8>> {
 
             match fs::read(&exe_path) {
                 Err(e) => {
-                    println!("{:?}. File path: {}", e, exe_path);
+                    println!("{}. File path: {}", e, exe_path);
                     None
                 },
                 Ok(data) => {
