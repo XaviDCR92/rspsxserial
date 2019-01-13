@@ -6,6 +6,8 @@ pub enum TransferState {
     SendExeSize,
     CleaningRAM,
     SendExeData,
+    WaitFileRequest,
+    SendFile,
     Finished
 }
 
@@ -50,7 +52,10 @@ pub fn wait_ack_default(port : &mut serial::SystemPort, prev_state: TransferStat
         Ok(1) => {
             if *(buffer.get(0).unwrap()) == 'b' as u8 {
                 match prev_state {
-                    TransferState::FirstContact => TransferState::SendHeader,
+                    TransferState::FirstContact => {
+                        println!("Got response from the device");
+                        TransferState::SendHeader
+                    },
                     TransferState::SendHeader => TransferState::SendExeSize,
                     TransferState::SendExeSize => TransferState::CleaningRAM,
                     TransferState::CleaningRAM => TransferState::SendExeData,
@@ -103,9 +108,9 @@ pub fn send_exe_size(port: &mut serial::SystemPort, exe_data: &Vec<u8>) -> Trans
         use std::io::Write;
 
         let exe_size_vec : [u8; 4] = [(exe_size & 0xFF) as u8,
-                                        ((exe_size & 0xFF00) >> 8) as u8,
-                                        ((exe_size & 0xFF0000) >> 16) as u8,
-                                        ((exe_size & 0xFF000000) >> 24) as u8];
+                                      ((exe_size & 0xFF00) >> 8) as u8,
+                                      ((exe_size & 0xFF0000) >> 16) as u8,
+                                      ((exe_size & 0xFF000000) >> 24) as u8];
         (*port).write(&exe_size_vec).expect("Could not write EXE size into the device");
 
         TransferState::WaitAck
@@ -130,6 +135,10 @@ pub fn send_exe_data(port: &mut serial::SystemPort, sent_bytes: &mut usize, exe_
                 (*port).write(&chunk).expect("Could not write EXE header into the device");
 
                 *sent_bytes += PACKET_SIZE;
+
+                if *sent_bytes % 32 == 0 {
+                    print!("\rSent {:?}/{:?} bytes...", *sent_bytes, exe_size - EXE_DATA_OFFSET);
+                }
             }
         }
 
@@ -137,8 +146,67 @@ pub fn send_exe_data(port: &mut serial::SystemPort, sent_bytes: &mut usize, exe_
     }
     else
     {
-        TransferState::Finished
+        println!("Finished");
+
+        // Reset number of sent bytes.
+        *sent_bytes = 0;
+        TransferState::WaitFileRequest
     }
+}
+
+/// This function waits for a file read request from the device and
+/// constructs a valid file name for it. If no valid data is provided,
+/// this state is re-entered cyclically.
+pub fn wait_file_request(port : &mut serial::SystemPort, requested_file : &mut String) -> TransferState {
+    // For some reason, this trait has to be imported,
+    // but shouldn't serial::SerialPort be already doing this?
+    use std::io::Read;
+
+    use serial::SerialPort;
+
+    const TIMEOUT_SECONDS : u64 = 5;
+
+    let mut buffer : [u8; 128] = [0; 128];
+
+    (*port).set_timeout(std::time::Duration::from_secs(TIMEOUT_SECONDS)).expect("Could not adjust timeout");
+
+    match (*port).read(&mut buffer) {
+        Err(_) | Ok(0) => {
+            println!("No information has been received yet");
+            TransferState::WaitFileRequest
+        },
+        Ok(_) => get_file_name(&buffer.to_vec(), requested_file)
+    }
+}
+
+fn get_file_name(buffer : &Vec<u8>, requested_file: &mut String) -> TransferState {
+    // No valid header byte has been found yet.
+    match buffer.iter().position(|&c| c == '#' as u8) {
+        None => TransferState::WaitFileRequest,
+        Some(pos) => {
+            let final_pos : usize =
+                match buffer.iter().position(|&c| c == '@' as u8) {
+                    None => buffer.len() - 1,
+                    Some(l) => l
+                };
+            requested_file.clone_from(&String::from_utf8(buffer[pos + 1..final_pos].to_vec()).unwrap());
+
+            println!("Requested file: {}", requested_file);
+
+            if requested_file.ends_with(";1") {
+                TransferState::SendFile
+            }
+            else
+            {
+                TransferState::WaitFileRequest
+            }
+        }
+    }
+}
+
+pub fn send_file(port : &mut serial::SystemPort, sent_bytes: &mut usize, requested_file: &String) -> TransferState {
+    println!("Requested file: {}", requested_file);
+    TransferState::Finished
 }
 
 pub fn get_exe_data(folder: &String) -> Option<Vec<u8>> {

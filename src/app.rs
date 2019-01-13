@@ -69,7 +69,7 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
     let mut state = TransferState::FirstContact;
     let mut prev_state = state;
     let mut sent_bytes = 0 as usize;
-
+    let mut requested_file = String::new();
     let exe_data = transfer::get_exe_data(&folder).unwrap();
 
     loop {
@@ -84,6 +84,8 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
             TransferState::SendExeSize => transfer::send_exe_size(&mut port, &exe_data),
             TransferState::CleaningRAM => transfer::wait_ack_default(&mut port, prev_state),
             TransferState::SendExeData => transfer::send_exe_data(&mut port, &mut sent_bytes, &exe_data),
+            TransferState::WaitFileRequest => transfer::wait_file_request(&mut port, &mut requested_file),
+            TransferState::SendFile => transfer::send_file(&mut port, &mut sent_bytes, &requested_file),
             TransferState::Finished => break
         };
     }
