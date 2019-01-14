@@ -60,6 +60,7 @@ pub fn wait_ack_default(port : &mut serial::SystemPort, prev_state: TransferStat
                     TransferState::SendExeSize => TransferState::CleaningRAM,
                     TransferState::CleaningRAM => TransferState::SendExeData,
                     TransferState::SendExeData => TransferState::SendExeData,
+                    TransferState::SendFile => TransferState::SendFile,
                     _ => TransferState::Finished
                 }
             }
@@ -204,9 +205,107 @@ fn get_file_name(buffer : &Vec<u8>, requested_file: &mut String) -> TransferStat
     }
 }
 
-pub fn send_file(port : &mut serial::SystemPort, sent_bytes: &mut usize, requested_file: &String) -> TransferState {
-    println!("Requested file: {}", requested_file);
-    TransferState::Finished
+pub fn send_file(port : &mut serial::SystemPort,
+                 folder: &String,
+                 sent_bytes: &mut usize,
+                 requested_file: &String,
+                 file_data : &mut Vec<u8>,
+                 file_size : &mut Option<usize>) -> TransferState {
+    use std::fs;
+    use regex::Regex;
+
+    lazy_static! {
+        static ref RX: Regex = Regex::new(r"^cdrom:\\(.+);1$").expect("Could not compile regex");
+    }
+
+    match *file_size {
+        None => {
+            match RX.captures(&requested_file) {
+                None => {
+                    println!("{} is not a valid file path", requested_file);
+                    TransferState::WaitFileRequest
+                },
+                Some(s) => {
+                    match s.get(1) {
+                        None => {
+                            println!("Internal error");
+                            TransferState::Finished
+                        },
+                        Some(s_) => {
+                            let mut path = String::from(s_.as_str()).replace('\\', "/");
+
+                            let absolute_path = format!("{}/{}", folder, path);
+
+                            println!("Absolute file path: {}", absolute_path);
+
+                            *file_data = fs::read(&absolute_path).unwrap();
+
+                            *file_size = Some(file_data.len());
+
+                            let size = (*file_size).unwrap();
+
+                            println!("File size: {:?} bytes", size);
+
+                            let file_size_vec : [u8; 4] = [(size & 0xFF) as u8,
+                                                           ((size & 0xFF00) >> 8) as u8,
+                                                           ((size & 0xFF0000) >> 16) as u8,
+                                                           ((size & 0xFF000000) >> 24) as u8];
+                            use std::io::Write;
+                            (*port).write(&file_size_vec).expect("Could not write EXE size into the device");
+
+                            return TransferState::WaitAck
+                        }
+                    }
+                }
+            }
+        },
+        Some(size) => {
+            if *sent_bytes < size {
+                match file_data.get(*sent_bytes..(*sent_bytes + PACKET_SIZE)) {
+                    None => {
+                        match file_data.get(*sent_bytes..size) {
+                            None => TransferState::Finished,
+                            Some(chunk) => {
+                                use std::io::Write;
+                                (*port).write(&chunk).expect("Could not file data chunk into the device");
+
+                                *sent_bytes = size;
+
+                                if *sent_bytes % 32 == 0 {
+                                    print!("\rSent {:?}/{:?} bytes...", *sent_bytes, size);
+                                }
+
+                                TransferState::WaitAck
+                            }
+                        }
+                    }
+                    Some(chunk) => {
+                        use std::io::Write;
+                        (*port).write(&chunk).expect("Could not file data chunk into the device");
+
+                        *sent_bytes += PACKET_SIZE;
+
+                        if *sent_bytes % 32 == 0 {
+                            print!("\rSent {:?}/{:?} bytes...", *sent_bytes, size);
+                        }
+
+                        TransferState::WaitAck
+                    }
+                }
+            }
+            else
+            {
+                println!("{} has been completely sent.", requested_file);
+
+                // Reset information.
+                *sent_bytes = 0;
+                *file_size = None;
+                file_data.clear();
+
+                TransferState::WaitFileRequest
+            }
+        }
+    }
 }
 
 pub fn get_exe_data(folder: &String) -> Option<Vec<u8>> {
