@@ -181,34 +181,48 @@ pub fn wait_file_request(port : &mut serial::SystemPort, requested_file : &mut S
 }
 
 fn get_file_name(buffer : &Vec<u8>, requested_file: &mut String) -> TransferState {
-    // No valid header byte has been found yet.
-    match buffer.iter().position(|&c| c == '#' as u8) {
-        None => TransferState::WaitFileRequest,
-        Some(pos) => {
-            let final_pos : usize =
-                match buffer.iter().position(|&c| c == '@' as u8) {
-                    None => buffer.len() - 1,
-                    Some(l) => l
-                };
-            requested_file.clone_from(&String::from_utf8(buffer[pos + 1..final_pos].to_vec()).unwrap());
-
-            println!("Requested file: {}", requested_file);
-
-            if requested_file.ends_with(";1") {
-                TransferState::SendFile
+    if requested_file.is_empty() {
+        // No valid header byte has been found yet.
+        match buffer.iter().position(|&c| c == '#' as u8) {
+            Some(pos) => {
+                let final_pos : usize =
+                    match buffer.iter().position(|&c| c == '@' as u8) {
+                        None => {
+                            println!("Terminator character could not be found");
+                            buffer.len() - 1
+                        },
+                        Some(l) => l
+                    };
+                requested_file.clone_from(&String::from_utf8(buffer[pos + 1..final_pos].to_vec()).unwrap());
             }
-            else
-            {
-                TransferState::WaitFileRequest
-            }
+            None => {},
         }
+    }
+    else
+    {
+        // No valid header byte has been found yet.
+        match buffer.iter().position(|&c| c == '@' as u8) {
+            Some(pos) => {
+                requested_file.push_str(&String::from_utf8(buffer[0..pos].to_vec()).unwrap());
+            }
+            None => {},
+        }
+    }
+
+    if requested_file.ends_with(";1") {
+        println!("Requested file: {}", requested_file);
+        TransferState::SendFile
+    }
+    else
+    {
+        TransferState::WaitFileRequest
     }
 }
 
 pub fn send_file(port : &mut serial::SystemPort,
                  folder: &String,
                  sent_bytes: &mut usize,
-                 requested_file: &String,
+                 requested_file: &mut String,
                  file_data : &mut Vec<u8>,
                  file_size : &mut Option<usize>) -> TransferState {
     use std::fs;
@@ -295,12 +309,13 @@ pub fn send_file(port : &mut serial::SystemPort,
             }
             else
             {
-                println!("{} has been completely sent.", requested_file);
+                println!("\r{} has been completely sent.", requested_file);
 
                 // Reset information.
                 *sent_bytes = 0;
                 *file_size = None;
                 file_data.clear();
+                requested_file.clear();
 
                 TransferState::WaitFileRequest
             }

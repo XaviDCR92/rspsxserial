@@ -94,7 +94,7 @@ fn serial_comm(addr : Option<&String>, port_name : &String, baud_rate : Option<&
             TransferState::SendFile => transfer::send_file(&mut port,
                                                             &folder,
                                                             &mut sent_bytes,
-                                                            &requested_file,
+                                                            &mut requested_file,
                                                             &mut file_data,
                                                             &mut file_size),
             TransferState::Finished => break
@@ -127,31 +127,25 @@ fn serial_init(addr : Option<&String>, port_name : &String, baud_rate : Option<&
         }
     };
 
-    // This variable will be bound to a SystemPort
-    // instance if everything could be configured successfully.
-    let mut port_unwrapped;
-
     match port {
-       Err(_) => {
-           return Err(Error::new(ErrorKind::NotFound, "Could not open serial device"));
-       },
+        Err(_) => {
+            Err(Error::new(ErrorKind::NotFound, "Could not open serial device"))
+        },
 
-       Ok(p) => {
-           port_unwrapped = p;
-       }
-    };
+        Ok(mut p) => {
+            let settings =
+                serial::PortSettings {
+                    baud_rate: baud,
+                    char_size: serial::Bits8,
+                    parity: serial::ParityNone,
+                    stop_bits: serial::Stop1,
+                    flow_control: serial::FlowNone
+                };
 
-    let settings =
-        serial::PortSettings {
-            baud_rate: baud,
-            char_size: serial::Bits8,
-            parity: serial::ParityNone,
-            stop_bits: serial::Stop1,
-            flow_control: serial::FlowNone
-        };
+            p.configure(&settings)?;
 
-    port_unwrapped.configure(&settings)?;
-
-    // Return SystemPort instance if successful.
-    Ok(port_unwrapped)
+            // Return SystemPort instance if successful.
+            Ok(p)
+        }
+    }
 }
