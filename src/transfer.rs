@@ -172,10 +172,7 @@ pub fn wait_file_request(port : &mut serial::SystemPort, requested_file : &mut S
     (*port).set_timeout(std::time::Duration::from_secs(TIMEOUT_SECONDS)).expect("Could not adjust timeout");
 
     match (*port).read(&mut buffer) {
-        Err(_) | Ok(0) => {
-            println!("No information has been received yet");
-            TransferState::WaitFileRequest
-        },
+        Err(_) | Ok(0) => TransferState::WaitFileRequest,
         Ok(_) => get_file_name(&buffer.to_vec(), requested_file)
     }
 }

@@ -16,7 +16,7 @@ pub fn app(arg_hash: HashMap<String, String>) -> Result<()> {
     let addr = arg_hash.get(&String::from(cmdline::TCP_ARG));
 
     match addr {
-        None => println!("No TCP address specified"),
+        None => {},
         Some(addr) => setup_tcp(addr)?
     };
 
