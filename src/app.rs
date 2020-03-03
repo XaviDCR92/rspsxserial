@@ -15,10 +15,9 @@ pub fn app(arg_hash: HashMap<String, String>) -> Result<()> {
 
     let addr = arg_hash.get(&String::from(cmdline::TCP_ARG));
 
-    match addr {
-        None => {},
-        Some(addr) => setup_tcp(addr)?
-    };
+    if let Some(addr) = addr {
+        setup_tcp(addr)?
+    }
 
     // Since this should never return None, always unwrap() it.
     let port_name = arg_hash.get(&String::from(cmdline::PORT_NAME_ARG)).unwrap();
